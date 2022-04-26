@@ -1,0 +1,60 @@
+#include "DigitalOut.h"
+#include "InterruptIn.h"
+#include "PinNames.h"
+#include "PinNamesTypes.h"
+#include "ThisThread.h"
+#include "mbed.h"
+#include "pinmap.h"
+#include <cstdio>
+#include "mbed.h"
+
+DigitalOut oled1(LED1);
+DigitalOut testled(PC_7);
+InterruptIn but(BUTTON1);
+bool led;
+
+typedef struct
+{
+    bool transfer;  //структура данных, содержащая булевую переменную tranfser, которая \
+    для хранения значения переменной состояния светодиода
+} message_t;
+
+MemoryPool<message_t, 16> mpool;
+Queue<message_t, 16> queue;   //объявление пула памяти, очереди и потока
+Thread thread;
+
+void pressed()
+{
+    led = !led;  //функция изменения значения булевой переменной
+}
+/* поток отправитель */
+void send_thread(void)
+{
+    bool wait = false;
+    while (true) {  //
+        if (led != wait) {
+        wait = led;
+        testled = led;
+        message_t *message = mpool.alloc();
+        message->transfer = led; //присваивание переменной из структуры данных значения led
+        queue.put(message); //перемещение сообщения в очередь
+        }
+        }
+}
+int main(void)
+{
+    but.rise(&pressed); //нажатие кнопки
+
+    thread.start(callback(send_thread));
+    while (true) {
+        osEvent evt = queue.get();
+    if (evt.status == osEventMessage) {
+        message_t *message = (message_t *)evt.value.p;
+        testled = !message->transfer; //изменение состояния светодиода на обратное значение из \
+        полученного сообщения
+        oled1 = message->transfer; //изменение состояния светодиода на значение из \
+        полученного сообщения
+        mpool.free(message);
+    }
+    }
+}
